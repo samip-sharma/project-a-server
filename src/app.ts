@@ -3,7 +3,7 @@ import { db, oneTimePasswords, eq, and, desc, users } from "./db/index.js";
 import { E164PhoneNumberSchema } from "./schemas.js";
 import { OTP_VALIDITY_DURATION_SECONDS, generateOTP, OtpValueSchema } from "./otp.js";
 import { addSeconds, isPast } from "date-fns";
-import { createAccessToken, createRefreshToken } from "./auth.js";
+import { createToken, shouldCreateNewRefreshToken, verifyToken } from "./auth.js";
 
 const app = new Hono();
 
@@ -50,8 +50,8 @@ app.post("/login_with_otp", async (ctx) => {
 				return user;
 			});
 
-			const accessToken = await createAccessToken(user.id);
-			const refreshToken = await createRefreshToken();
+			const accessToken = await createToken("access", user.id);
+			const refreshToken = await createToken("refresh", user.id);
 
 			return ctx.json({ accessToken, refreshToken });
 		}
@@ -59,6 +59,24 @@ app.post("/login_with_otp", async (ctx) => {
 
 	ctx.status(422);
 	return ctx.json({ error: "Invalid OTP" });
+});
+
+app.post("/refresh_token", async (ctx) => {
+	let refreshToken = ctx.req.header("Authorization")?.split(" ")[1];
+	if (!refreshToken) {
+		ctx.status(401);
+		return ctx.text("Unauthorized");
+	}
+
+	const { userId } = await verifyToken("refresh", refreshToken);
+
+	const accessToken = await createToken("access", userId);
+
+	if (shouldCreateNewRefreshToken(refreshToken)) {
+		refreshToken = await createToken("refresh", userId);
+	}
+
+	return ctx.json({ accessToken, refreshToken });
 });
 
 export default app;
