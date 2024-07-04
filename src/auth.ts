@@ -25,8 +25,10 @@ type TokenPayload = z.infer<typeof TokenPayloadSchema>;
 export function createToken(type: TokenType, userId: string): Promise<string> {
 	const { secret, validityDurationSeconds } = tokenProperties[type];
 	const iat = Date.now() / 1000;
+	const exp = iat + validityDurationSeconds;
+	const payload: TokenPayload = { userId, iat, exp };
 
-	return sign({ userId, iat, exp: iat + validityDurationSeconds }, secret);
+	return sign(payload, secret);
 }
 
 export async function verifyToken(type: TokenType, token: string): Promise<TokenPayload> {
@@ -38,9 +40,7 @@ export async function verifyToken(type: TokenType, token: string): Promise<Token
 
 export function shouldCreateNewRefreshToken(token: string): boolean {
 	const { payload } = decode(token);
-
 	const { exp } = TokenPayloadSchema.parse(payload);
-
 	const secondsUntilExpiration = exp - Date.now() / 1000;
 
 	return secondsUntilExpiration <= MINIMUM_SECONDS_UNTIL_REFRESH_TOKEN_EXPIRATION_REQUIRED_FOR_REGENERATION;
